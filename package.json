@@ -1,0 +1,12 @@
+{
+  "name": "mini-shell",
+  "version": "0.1.0",
+  "description": "A tiny Unix shell built in Node.js to explore processes, fds, pipes, and signals.",
+  "type": "commonjs",
+  "bin": {
+    "mini-shell": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
