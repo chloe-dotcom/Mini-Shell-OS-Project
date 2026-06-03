@@ -58,37 +58,49 @@ function runPipeline(stages) {
   return new Promise((resolve) => {
     const children = [];
 
-    // Hint for fd0 of the FIRST stage: if you inherit the shell's stdin while
-    // the shell is being driven by a non-terminal (a script/pipe), the child
-    // fights readline for those bytes. Guard with process.stdin.isTTY:
-    //   const firstStdin = process.stdin.isTTY ? "inherit" : "ignore";
+    // for the first stage, read from terminal (only) "inherit"
+    const firstStdin = process.stdin.isTTY ? "inherit" : "ignore";
 
     for (let i = 0; i < stages.length; i++) {
       const { command, args } = stages[i];
       const isFirst = i === 0;
       const isLast = i === stages.length - 1;
 
-      // TODO(A): build the stdio array for this stage.
-      //   fd0: first stage -> firstStdin (see hint above); otherwise "pipe"
-      //        (it will be fed by the previous stage).
-      //   fd1: last stage  -> "inherit"  (writes to terminal); otherwise "pipe"
-      //        (it feeds the next stage).
-      //   fd2: "inherit"   (so errors are always visible).
+      let stdio;
+      if (isFirst) {
+        stdio = [firstStdin, "pipe", "inherit"];
+      }
+      else if (isLast){
+        stdio = ["pipe", "inherit", "inherit"];
+      }
+      else {
+        stdio = ["pipe", "pipe", "inherit"];
+      }
 
-      // TODO(B): spawn the child with that stdio array and push it to children[].
-      //   const child = spawn(command, args, { stdio });
-      //   Attach a child.on("error", ...) handler like runSingle does.
+      const child = spawn(command, args, { stdio });
+      children.push(child); // holds processes
 
-      // TODO(C): if this is NOT the first stage, connect the previous child's
-      //   stdout to this child's stdin — THIS LINE IS THE `|`:
-      //     children[i - 1].stdout.pipe(child.stdin);
+      child.on("error", (err) => {
+        if (err.code === "ENOENT") {
+          console.error(`mini-shell: command not found: ${command}`);
+        } else {
+          console.error(`mini-shell: ${err.message}`);
+        }
+      });
+
+      if (!isFirst) {
+        children[i - 1].stdout.pipe(child.stdin);
+      }
     }
 
-    // TODO(D): the pipeline is "done" when the LAST child closes. Attach a
-    //   "close" handler on the last child that calls resolve().
-    //   (Edge case to think about: what if children[] is empty?)
+    // edge case: empty children
+    if(children.length === 0) {
+      return resolve();
+    }
 
-    resolve(); // <- remove/replace once TODO(D) is in place
+    // pipeline complete after last child closes
+    const last = children[children.length - 1];
+    last.on("close", () => resolve());
   });
 }
 
